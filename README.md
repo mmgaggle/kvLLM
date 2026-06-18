@@ -1,4 +1,4 @@
-# kLLM
+# kvLLM
 
 An experimental LLM serving engine built around a single idea: **KV cache and
 model weights are immutable, content-addressed blocks, and the GPU faults them

@@ -16,4 +16,5 @@ gpu/cache_test
 gpu/kvcache_test
 gpu/warmstart_test
 gpu/gpt2_gen
+gpu/granite_gen
 gpu/kllm-serve

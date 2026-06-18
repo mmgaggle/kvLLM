@@ -72,11 +72,20 @@ gpu/gpt2.o: gpu/gpt2.hip gpu/gpt2.h
 gpu/gpt2_gen.o: gpu/gpt2_gen.cpp gpu/gpt2.h
 	$(CXX) -O2 -std=c++17 -fPIC -Igpu -c -o $@ $<
 
+# Real IBM Granite 4.0 nano. `make granite` builds the generator; run via run_granite.py.
+granite: gpu/granite_gen
+gpu/granite_gen: gpu/granite.o gpu/granite_gen.o
+	$(HIPCC) $(HIPCFLAGS) -o $@ $^ $(HIPLDLIBS)
+gpu/granite.o: gpu/granite.hip gpu/granite.h
+	$(HIPCC) $(HIPCFLAGS) -c -o $@ $<
+gpu/granite_gen.o: gpu/granite_gen.cpp gpu/granite.h
+	$(CXX) -O2 -std=c++17 -fPIC -Igpu -c -o $@ $<
+
 # /dev/kllm serving real GPT-2 with content-addressed KV (CUSE daemon).
 serve: gpu/kllm-serve
-gpu/kllm-serve: src/chash.o src/kvstore.o gpu/gpt2.o gpu/kllm_serve.o
+gpu/kllm-serve: src/chash.o src/kvstore.o gpu/granite.o gpu/kllm_serve.o
 	$(HIPCC) $(HIPCFLAGS) -o $@ $^ $(HIPLDLIBS) $(FUSE_LIBS)
-gpu/kllm_serve.o: gpu/kllm_serve.cpp gpu/gpt2.h src/chash.h src/kvstore.h
+gpu/kllm_serve.o: gpu/kllm_serve.cpp gpu/granite.h src/chash.h src/kvstore.h
 	$(CXX) -O2 -std=c++17 -fPIC -Isrc -Igpu $(FUSE_CFLAGS) -c -o $@ $<
 
 # Incremental KV cache: identical output to recompute, O(n) not O(n^2).
@@ -101,6 +110,7 @@ clean:
 	      gpu/decode.o gpu/decode gpu/cache_test.o gpu/cache_test \
 	      gpu/gpt2.o gpu/gpt2_gen.o gpu/gpt2_gen \
 	      gpu/kvcache_test.o gpu/warmstart_test gpu/warmstart_test.o \
-	      gpu/kllm_serve.o gpu/kllm-serve
+	      gpu/kllm_serve.o gpu/kllm-serve \
+	      gpu/granite.o gpu/granite_gen.o gpu/granite_gen
 
-.PHONY: all test gpu-test gpu-decode gpu-cache-test gpt2 serve gpu-kvcache gpu-warmstart clean
+.PHONY: all test gpu-test gpu-decode gpu-cache-test gpt2 granite serve gpu-kvcache gpu-warmstart clean

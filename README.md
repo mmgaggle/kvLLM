@@ -47,9 +47,10 @@ gfx1151 / ROCm):
   transaction: write the prompt, read the completion.
 - **Transformer inference in HIP**, written from scratch (no PyTorch or
   llama.cpp). A Llama-style stack (RMSNorm, GQA, RoPE, SwiGLU) is validated
-  against a CPU reference to a max absolute logit error of 1.2e-7. A GPT-2 stack
-  (LayerNorm, learned positions, GELU, tied embeddings) loads the real 124M
-  weights and generates coherent text.
+  against a CPU reference to a max absolute logit error of 1.2e-7. The served
+  model is **IBM Granite 4.0 (350M)** — a real instruct-tuned model (GQA,
+  rotate-half RoPE, SwiGLU, Granite's scalar multipliers, tied embeddings),
+  loaded from real weights. A GPT-2 (124M) stack is also included.
 - **Content-addressed paged KV cache** — fp16 KV blocks keyed by prefix Merkle
   hash, in a store that mirrors the SPDK `kvdev` interface so a real
   disaggregated backend can replace it without touching the engine.
@@ -70,8 +71,8 @@ gfx1151 / ROCm):
 | Cache invariant (cached prefix == full recompute) | `make gpu-cache-test` |
 | Incremental KV cache == recompute | `make gpu-kvcache` |
 | Warm-start (load prefix, skip prefill) | `make gpu-warmstart` |
-| Real GPT-2 generation | `make gpt2` |
-| `/dev/kllm` serving GPT-2 with warm-start | `make serve` |
+| Real Granite / GPT-2 generation | `make granite` / `make gpt2` |
+| `/dev/kllm` serving Granite with warm-start | `make serve` |
 
 ## Build and run
 
@@ -87,13 +88,12 @@ The GPU components require ROCm / `hipcc`:
 make gpu-test gpu-decode gpu-cache-test gpu-kvcache gpu-warmstart
 ```
 
-Real GPT-2 generation (weights are fetched from the local Hugging Face cache or
-downloaded on first export):
+Real model generation (weights are fetched from / via the Hugging Face cache):
 
 ```sh
-python3 gpu/export_gpt2.py            # one-time: safetensors -> flat fp32 weights
-make gpt2
-python3 gpu/run_gpt2.py "The meaning of life is" 30
+python3 gpu/export_granite.py         # one-time: safetensors -> flat fp32 weights
+make granite
+python3 gpu/run_granite.py "Explain RAID 6 in one sentence." 60 0.0 --chat
 ```
 
 Serving through `/dev/kllm` (the device node requires the `cuse` kernel module):
@@ -103,15 +103,16 @@ sudo dnf install kernel-modules-extra-$(uname -r)   # Fedora: provides cuse.ko
 sudo modprobe cuse
 make serve && sudo ./gpu/kllm-serve -f &
 sudo chmod 666 /dev/kllm
-python3 gpu/kllm_chat.py "Once upon a time in a land far away" 25        # greedy
-python3 gpu/kllm_chat.py "Once upon a time in a land far away" 25 0.8    # sampling
+python3 gpu/kllm_chat.py "What is the capital of Japan?"
 ```
 
-There is also a Rust client (`client/`) with one-shot and interactive modes:
+There is also a Rust client (`client/`) — an instruct chat with one-shot and
+interactive modes:
 
 ```sh
 cargo build --release --manifest-path client/Cargo.toml
-client/target/release/kllm-chat "Once upon a time in a land far away" -n 25
+client/target/release/kllm-chat "Name three primary colors."
+client/target/release/kllm-chat                 # interactive multi-turn chat
 client/target/release/kllm-chat --chat          # interactive REPL
 ```
 
@@ -137,7 +138,8 @@ See [doc/gpu-compute.md](doc/gpu-compute.md) for the GPU compute design.
 ```
 src/            CPU spine: char device, tokenizer, content hashing, KV store
 gpu/kmodel_*    Llama-style HIP forward and the correctness harnesses
-gpu/gpt2.*      GPT-2 in HIP: forward, incremental KV cache, warm-start
+gpu/granite.*   IBM Granite 4.0 in HIP: forward, incremental KV cache, warm-start
+gpu/gpt2.*      GPT-2 in HIP (the earlier, smaller model)
 gpu/kllm_serve  the /dev/kllm serving daemon
 gpu/*.py        userspace tokenizer front-ends (export, generate, chat)
 client/         Rust chat client for /dev/kllm (one-shot and interactive)

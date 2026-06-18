@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * kllm-serve — /dev/kllm backed by real GPT-2.
+ * kllm-serve — /dev/kllm backed by real IBM Granite 4.0.
  *
  * The device speaks TOKEN IDS (the BPE tokenizer lives in the userspace client,
  * per the locked decision). Request on a single open fd:
@@ -29,13 +29,13 @@
 #include <string>
 #include <vector>
 #include <sstream>
-#include "gpt2.h"
+#include "granite.h"
 #include "chash.h"
 #include "kvstore.h"
 
 #define PAGE_TOKENS 8   /* smaller pages => prompts have full leading pages to reuse */
 
-static Gpt2          *g_model;
+static Granite          *g_model;
 static kllm_kvstore  *g_ks;
 static kllm_key       g_seed;
 
@@ -74,7 +74,7 @@ serve_request(fh_state *st)
 	}
 
 	int ntok = (int)toks.size();
-	size_t be = gpt2_kv_block_elems(g_model, PAGE_TOKENS);
+	size_t be = granite_kv_block_elems(g_model, PAGE_TOKENS);
 
 	/* How many LEADING prompt pages are already in the content store? Those KV
 	 * blocks can be loaded and their prefill skipped. */
@@ -101,7 +101,7 @@ serve_request(fh_state *st)
 		n_load = 0;
 
 	/* Generate: warm-start from the cached prefix if we have one. */
-	Gpt2KV *kv = gpt2_kv_create(g_model, ntok + (int)n_new + 8);
+	GraniteKV *kv = granite_kv_create(g_model, ntok + (int)n_new + 8);
 	std::vector<uint32_t> gen;
 	if (n_load > 0) {
 		int npl = (n_load + PAGE_TOKENS - 1) / PAGE_TOKENS;
@@ -111,18 +111,18 @@ serve_request(fh_state *st)
 			kllm_kvstore_retrieve(g_ks, pkeys[p], &load_blocks[(size_t)p * be],
 					      (uint32_t)(be * sizeof(uint16_t)), &vlen);
 		}
-		gpt2_generate_warm(g_model, kv, load_blocks.data(), n_load, PAGE_TOKENS,
+		granite_generate_warm(g_model, kv, load_blocks.data(), n_load, PAGE_TOKENS,
 				   toks, (int)n_new, gen, temp, 1234ULL);
 	} else {
-		gpt2_generate_cached(g_model, kv, toks, (int)n_new, gen, temp, 1234ULL);
+		granite_generate_cached(g_model, kv, toks, (int)n_new, gen, temp, 1234ULL);
 	}
 
 	/* Store the full sequence's pages from the cache (no extra forward). */
 	int full = (int)toks.size();
 	int nfull = (full + PAGE_TOKENS - 1) / PAGE_TOKENS;
 	std::vector<uint16_t> full_blocks((size_t)nfull * be);
-	gpt2_kv_to_blocks(g_model, kv, PAGE_TOKENS, full_blocks.data());
-	gpt2_kv_free(kv);
+	granite_kv_to_blocks(g_model, kv, PAGE_TOKENS, full_blocks.data());
+	granite_kv_free(kv);
 
 	parent = g_seed;
 	int stored = 0, reused = 0;
@@ -209,12 +209,12 @@ main(int argc, char **argv)
 	kllm_clop.release = kllm_release;
 
 	const char *wts = getenv("KLLM_WEIGHTS");
-	g_model = gpt2_load(wts ? wts : "models/gpt2/gpt2.weights");
+	g_model = granite_load(wts ? wts : "models/granite/granite.weights");
 	if (!g_model) {
 		fprintf(stderr, "kllm-serve: failed to load GPT-2 weights\n");
 		return 1;
 	}
-	const char *ctx = "gpt2|124M|fp32";
+	const char *ctx = "granite-4.0-350m|fp32";
 	g_seed = kllm_chash(ctx, strlen(ctx));
 	g_ks = kllm_kvstore_create();
 
@@ -225,6 +225,6 @@ main(int argc, char **argv)
 	ci.dev_info_argv = dev_info_argv;
 	ci.flags = CUSE_UNRESTRICTED_IOCTL;
 
-	fprintf(stderr, "kllm-serve: GPT-2 ready, serving /dev/kllm\n");
+	fprintf(stderr, "kllm-serve: Granite ready, serving /dev/kllm\n");
 	return cuse_lowlevel_main(argc, argv, &ci, &kllm_clop, NULL);
 }

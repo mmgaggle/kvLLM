@@ -107,6 +107,14 @@ python3 gpu/kllm_chat.py "Once upon a time in a land far away" 25        # greed
 python3 gpu/kllm_chat.py "Once upon a time in a land far away" 25 0.8    # sampling
 ```
 
+There is also a Rust client (`client/`) with one-shot and interactive modes:
+
+```sh
+cargo build --release --manifest-path client/Cargo.toml
+client/target/release/kllm-chat "Once upon a time in a land far away" -n 25
+client/target/release/kllm-chat --chat          # interactive REPL
+```
+
 Sending the same prompt twice: the second request reports `prefill_skipped N` —
 its prompt KV is loaded from the content store rather than recomputed.
 
@@ -132,6 +140,7 @@ gpu/kmodel_*    Llama-style HIP forward and the correctness harnesses
 gpu/gpt2.*      GPT-2 in HIP: forward, incremental KV cache, warm-start
 gpu/kllm_serve  the /dev/kllm serving daemon
 gpu/*.py        userspace tokenizer front-ends (export, generate, chat)
+client/         Rust chat client for /dev/kllm (one-shot and interactive)
 ```
 
 ## Roadmap

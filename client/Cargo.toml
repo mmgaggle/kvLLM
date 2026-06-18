@@ -1,0 +1,15 @@
+[package]
+name = "kllm-chat"
+version = "0.1.0"
+edition = "2021"
+description = "A chat client for the kLLM character device (/dev/kllm)."
+
+[[bin]]
+name = "kllm-chat"
+path = "src/main.rs"
+
+[dependencies]
+tokenizers = "0.21"
+
+[profile.release]
+opt-level = 2

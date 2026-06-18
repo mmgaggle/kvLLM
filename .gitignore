@@ -4,6 +4,7 @@ models/
 # build artifacts
 *.o
 __pycache__/
+client/target/
 
 # binaries
 /kllm
